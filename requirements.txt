@@ -1,3 +1,5 @@
 opencv-python
 natsort
 numpy
+pillow  # 用于图像处理
+tkinter  # GUI界面（Python标准库，可能不需要单独安装）

@@ -27,11 +27,13 @@ def extract_year(filename):
         return int(match.group(1))  # 公元后返回正数
     return 0  # 无法识别的格式返回0
 
-def create_video_from_images(input_folder, output_path=None):
+def create_video_from_images(input_folder, output_path=None, progress_callback=None, status_callback=None):
     """
     从指定文件夹中的图片创建视频
     :param input_folder: 输入文件夹路径
     :param output_path: 输出视频文件路径，如果不指定则根据输入文件夹自动生成
+    :param progress_callback: 进度更新回调函数，接受当前进度(0-100)
+    :param status_callback: 状态更新回调函数，接受状态信息字符串
     """
     if output_path is None:
         # 从输入文件夹名称生成输出文件名，保存到 E:\历史地图 目录
@@ -44,22 +46,28 @@ def create_video_from_images(input_folder, output_path=None):
 
     # 检查输入文件夹是否存在
     if not os.path.exists(input_folder):
-        print(f"错误：输入文件夹 {input_folder} 不存在！")
-        return
+        if status_callback:
+            status_callback(f"错误：输入文件夹 {input_folder} 不存在！")
+        return False
 
     # 获取所有图片文件
     image_files = [f for f in os.listdir(input_folder) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp'))]
     if not image_files:
-        print("错误：文件夹中没有找到图片文件！")
-        return    # 按照年份排序（从早到晚）
+        if status_callback:
+            status_callback("错误：文件夹中没有找到图片文件！")
+        return False
+
+    # 按照年份排序（从早到晚）
     image_files = sorted(image_files, key=extract_year)
-    print(f"找到 {len(image_files)} 个图片文件")
+    if status_callback:
+        status_callback(f"找到 {len(image_files)} 个图片文件")
     
     # 显示排序后的文件顺序
-    print("\n排序后的文件顺序：")
-    for f in image_files:
-        year = extract_year(f)
-        print(f"{format_year(year)} - {f}")
+    if status_callback:
+        status_callback("\n排序后的文件顺序：")
+        for f in image_files:
+            year = extract_year(f)
+            status_callback(f"{format_year(year)} - {f}")
 
     # 读取第一张图片来获取尺寸
     try:
@@ -68,14 +76,19 @@ def create_video_from_images(input_folder, output_path=None):
             first_image_bytes = np.asarray(bytearray(f.read()), dtype=np.uint8)
         first_image = cv2.imdecode(first_image_bytes, cv2.IMREAD_COLOR)
         if first_image is None:
-            print(f"错误：无法读取图片 {image_files[0]}")
-            return
+            if status_callback:
+                status_callback(f"错误：无法读取图片 {image_files[0]}")
+            return False
     except Exception as e:
-        print(f"错误：读取图片时出错 {image_files[0]} - {str(e)}")
-        return
+        if status_callback:
+            status_callback(f"错误：读取图片时出错 {image_files[0]} - {str(e)}")
+        return False
 
     height, width, layers = first_image.shape
-    print(f"视频尺寸将为: {width}x{height}")    # 创建视频写入器
+    if status_callback:
+        status_callback(f"视频尺寸将为: {width}x{height}")
+
+    # 创建视频写入器
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     fps = 10  # 基础帧率设为10，这样写入3帧就是0.3秒，写入10帧就是1秒
     video = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
@@ -84,13 +97,19 @@ def create_video_from_images(input_folder, output_path=None):
     total_frames = len(image_files)
     for i, image_file in enumerate(image_files, 1):
         try:
+            # 更新进度
+            if progress_callback:
+                progress = (i - 1) / total_frames * 100
+                progress_callback(progress)
+            
             image_path = os.path.join(input_folder, image_file)
             with open(image_path, 'rb') as f:
                 image_bytes = np.asarray(bytearray(f.read()), dtype=np.uint8)
             frame = cv2.imdecode(image_bytes, cv2.IMREAD_COLOR)
             
             if frame is None:
-                print(f"警告：跳过无法读取的图片 {image_file}")
+                if status_callback:
+                    status_callback(f"警告：跳过无法读取的图片 {image_file}")
                 continue
             
             # 确保所有图片大小一致
@@ -107,15 +126,23 @@ def create_video_from_images(input_folder, output_path=None):
             for _ in range(repeat_frames):
                 video.write(frame)
             
-            print(f"处理进度: {i}/{total_frames} - {format_year(year)} - 显示{repeat_frames/10}秒")
+            if status_callback:
+                status_callback(f"处理进度: {i}/{total_frames} - {format_year(year)} - 显示{repeat_frames/10}秒")
         
         except Exception as e:
-            print(f"警告：处理图片时出错 {image_file} - {str(e)}")
+            if status_callback:
+                status_callback(f"警告：处理图片时出错 {image_file} - {str(e)}")
             continue
+
+    # 最后更新进度为100%
+    if progress_callback:
+        progress_callback(100)
 
     # 释放资源
     video.release()
-    print(f"\n视频已成功保存到: {output_path}")
+    if status_callback:
+        status_callback(f"\n视频已成功保存到: {output_path}")
+    return True
 
 if __name__ == "__main__":
     # 可以处理的文件夹列表
