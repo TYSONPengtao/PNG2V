@@ -75,11 +75,9 @@ def create_video_from_images(input_folder, output_path=None):
         return
 
     height, width, layers = first_image.shape
-    print(f"视频尺寸将为: {width}x{height}")
-
-    # 创建视频写入器
+    print(f"视频尺寸将为: {width}x{height}")    # 创建视频写入器
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    fps = 10/3  # 约3.33 fps，这样每张图片显示0.3秒
+    fps = 10  # 基础帧率设为10，这样写入3帧就是0.3秒，写入10帧就是1秒
     video = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
     # 处理每张图片
@@ -98,10 +96,18 @@ def create_video_from_images(input_folder, output_path=None):
             # 确保所有图片大小一致
             if frame.shape[0] != height or frame.shape[1] != width:
                 frame = cv2.resize(frame, (width, height))
-              # 写入一帧
-            video.write(frame)
+
+            # 获取年份
             year = extract_year(image_file)
-            print(f"处理进度: {i}/{total_frames} - {format_year(year)}")
+            
+            # 根据年份决定重复写入的次数（公元前0.3秒，公元后1秒）
+            repeat_frames = 3 if year < 0 else 10
+            
+            # 写入帧
+            for _ in range(repeat_frames):
+                video.write(frame)
+            
+            print(f"处理进度: {i}/{total_frames} - {format_year(year)} - 显示{repeat_frames/10}秒")
         
         except Exception as e:
             print(f"警告：处理图片时出错 {image_file} - {str(e)}")
